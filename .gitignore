@@ -1,0 +1,4 @@
+*.db
+ve
+build
+*.pyc
