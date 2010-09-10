@@ -1,23 +1,18 @@
-"""
-This file demonstrates two different styles of tests (one doctest and one
-unittest). These will both pass when you run "manage.py test".
-
-Replace these with more appropriate tests for your application.
-"""
-
 from django.test import TestCase
+from app.models import Node, Clip, Propagation
 
-class SimpleTest(TestCase):
-    def test_basic_addition(self):
-        """
-        Tests that 1 + 1 always equals 2.
-        """
-        self.failUnlessEqual(1 + 1, 2)
-
-__test__ = {"doctest": """
-Another way to test that 1 + 1 is equal to 2.
-
->>> 1 + 1 == 2
-True
-"""}
-
+class AppTestCase(TestCase):
+    
+    def setUp(self):
+        pass
+    
+    def tearDown(self):
+        pass
+    
+    def test_propagation_tracking(self):
+        node = Node.objects.create(title="Node 1")
+        clip1 = Clip.objects.create(title="Clip 1")
+        clip2 = Clip.objects.create(title="Clip 2")
+        
+        Propagation.objects.create(node=node, clip=clip1)
+        Propagation.objects.create(node=node, clip=clip2)
