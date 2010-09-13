@@ -4,14 +4,27 @@ from app.models import Node, Propagation
 
 class AppTestCase(TestCase):
     
-    def create_master_and_slaves(self):
-        self.node = Node(title="Node 1")
-        self.node.save()
+    def setUp(self):
+        pass
+    
+    def tearDown(self):
+        # Dump the data that's in the node1 database
+        print "Summary of what's available in database 2"
+        print "=" * 50
+        for node in Node.objects.all().using("node1"):
+            print "Record:", node, "Fields:", node._as_dict()
         
+    
+    def create_master_and_slaves(self):
+        # master
+        self.node = Node(title="Node 1")
+        self.node.save(propagate=True)
+        
+        # slaves
         self.slave_1 = Node(title="Slave 1")
-        self.slave_1.save()
+        self.slave_1.save(propagate=False)
         self.slave_2 = Node(title="Slave 2")
-        self.slave_2.save()
+        self.slave_2.save(propagate=False)
         
         # This setup requires explicite creation of M2M objects
         # node.slaves.create & node.slaves.add doesn't work
@@ -38,7 +51,7 @@ class AppTestCase(TestCase):
         self.assertEquals(Propagation.changes.to_push().count(), 0)
         
         self.node.title="Changed title"
-        self.node.save()
+        self.node.save(propagate=True)
         
         # the slave versions are behind and should be pushed
         self.assertEquals(Propagation.changes.to_push().count(), 2)
@@ -47,14 +60,12 @@ class AppTestCase(TestCase):
         """Nothing should be changed if no fields have changed"""
         self.create_master_and_slaves()
         self.assertFalse(self.node.is_dirty())
-        self.node.save()
+        self.node.save(propagate=True)
         self.assertEquals(Propagation.changes.to_push().count(), 0)
     
     def test_changes_being_propagated(self):
         """Using the History we should be able to see what's changed"""
         self.create_master_and_slaves()
         self.node.title="Changed Title"
-        self.node.save()
-        
-        # print Propagation.summary_of_changes()
+        self.node.save(propagate=True)
         

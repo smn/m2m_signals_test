@@ -21,10 +21,6 @@ DATABASES = {
     'node1': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': 'node1.db'
-    },
-    'node2': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': 'node2.db'
     }
 }
 

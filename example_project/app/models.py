@@ -26,24 +26,30 @@ class Node(DirtyFieldsMixin, models.Model):
     def save(self, *args, **kwargs):
         # only save if our state has actually changed
         if self.is_dirty():
+            # check if we're supposed to propagate this changes to other nodes
+            # or if this save() is considered a final destination, by default
+            # do not do this
+            propagate = kwargs.pop('propagate', False)
+            
             # first save the record
             super(Node, self).save(*args, **kwargs)
             
-            # Update the versioning based on the DBs current value of the field
-            # hopefully avoid some nasty race conditions, it's slightly ugly
-            # since I'm doing a filter that will always only return a single record
-            Node.objects.filter(pk=self.pk).update(version=F('version') + 1)
+            if propagate:
+                # Update the versioning based on the DBs current value of the field
+                # hopefully avoid some nasty race conditions, it's slightly ugly
+                # since I'm doing a filter that will always only return a single record
+                Node.objects.filter(pk=self.pk).update(version=F('version') + 1)
             
-            # *HERE BE DRAGONS*
-            # Update the propagation object, get whatever version our database
-            # thinking the previous version + 1 is. Doing all this hoopla
-            # to prevent nasty race conditions, hopefully.
-            saved_node = Node.objects.get(pk=self.pk)
-            for propagation in Propagation.objects.filter(master=self):
-                propagation.master_version = saved_node.version
-                # make sure we do an actual save() here so the 
-                # signals are triggered
-                propagation.save()
+                # *HERE BE DRAGONS*
+                # Update the propagation object, get whatever version our database
+                # thinking the previous version + 1 is. Doing all this hoopla
+                # to prevent nasty race conditions, hopefully.
+                saved_node = Node.objects.get(pk=self.pk)
+                for propagation in Propagation.objects.filter(master=self):
+                    propagation.master_version = saved_node.version
+                    # make sure we do an actual save() here so the 
+                    # signals are triggered
+                    propagation.save()
             
         
 
@@ -84,6 +90,15 @@ class Propagation(models.Model):
                 "\tSlave version number is: %s" % change.slave_version,
                 "\t\tfield values: %s" % slave_version._as_dict(),
             ])
+            
+            slave = change.slave
+            # _as_dict() is provided by dirtyfields
+            for field, value in change.master._as_dict().items():
+                setattr(slave, field, value)
+            # saving the slave, note the propagate=False keyword
+            # added, it avoids crazy recursive signal calling
+            slave.save(using="node1", propagate=False)
+                
         return '\n'.join(log)
 
 def print_change_summary(sender, **kwargs):
