@@ -1,5 +1,6 @@
 from django.db import models
 from django.db.models import F
+from django.db.models.signals import post_save
 from dirtyfields import DirtyFieldsMixin
 from history.models import HistoricalRecords
 
@@ -27,10 +28,14 @@ class Node(DirtyFieldsMixin, models.Model):
             Node.objects.filter(pk=self.pk).update(version=F('version') + 1)
             # Update the propagation object, have Django do the DB lookup through
             # a join and fill in that value.
-        
+            
             # Here be dragons
             saved_node = Node.objects.get(pk=self.pk)
-            Propagation.objects.filter(node=self).update(master_version=saved_node.version)
+            for propagation in Propagation.objects.filter(node=self):
+                propagation.master_version = saved_node.version
+                propagation.save()
+            
+        
 
 class PropagationManager(models.Manager):
     def to_push(self):
@@ -49,18 +54,28 @@ class Propagation(models.Model):
     objects = models.Manager()
     changes = PropagationManager()
     
+    def __unicode__(self):
+        return "<Propagation of '%s' v%s -> v%s >" % (
+            self.node.title,
+            self.master_version,
+            self.slave_version
+        )
+    
     @classmethod
     def summary_of_changes(klass):
+        log = []
         for change in klass.changes.to_push():
             master_version = change.node
             historical_slave_version = master_version.history.get(version=change.slave_version)
             slave_version = historical_slave_version.history_object
-            print "Got a change:"
-            print "\tMaster version number is: %s" % change.master_version
-            print "\tMaster field values: %s" % master_version._as_dict()
-            print "\tSlave version number is: %s" % change.slave_version
-            print "\tSlave field values: %s" % slave_version._as_dict()
-        
+            log.extend([
+                "Got a change:",
+                "\tMaster version number is: %s" % change.master_version,
+                "\tMaster field values: %s" % master_version._as_dict(),
+                "\tSlave version number is: %s" % change.slave_version,
+                "\tSlave field values: %s" % slave_version._as_dict(),
+            ])
+        return '\n'.join(log)
 
 class Clip(models.Model):
     title = models.CharField(max_length=255)
@@ -78,3 +93,9 @@ class Clip(models.Model):
         self.version += 1
         super(Clip, self).save(*args, **kwargs)
 
+def print_change_summary(sender, **kwargs):
+    # assume we're in sync when creating, not always the case
+    # but easy enough for now
+    print Propagation.summary_of_changes()
+
+post_save.connect(print_change_summary, sender=Propagation)

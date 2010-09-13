@@ -15,8 +15,8 @@ class AppTestCase(TestCase):
         
         # This setup requires explicite creation of M2M objects
         # node.clips.create & node.clips.add doesn't work
-        Propagation.objects.create(node=self.node, clip=self.clip1)
-        Propagation.objects.create(node=self.node, clip=self.clip2)
+        Propagation(node=self.node, clip=self.clip1).save()
+        Propagation(node=self.node, clip=self.clip2).save()
         
         # reload these manually, tests are throwing things off
         self.node = Node.objects.get(pk=self.node.pk)
@@ -56,5 +56,5 @@ class AppTestCase(TestCase):
         self.node.title="Changed Title"
         self.node.save()
         
-        print Propagation.summary_of_changes()
+        # print Propagation.summary_of_changes()
         
