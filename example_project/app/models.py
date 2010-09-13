@@ -7,11 +7,11 @@ from history.models import HistoricalRecords
 class Node(DirtyFieldsMixin, models.Model):
     """
     A node is an entity in the network to which any associated data can be
-    pushed. In this contrived example, a Clip is the only associated data
+    pushed. In this contrived example, another Node is the only associated data
     possible.
     """
     title = models.CharField(max_length=255)
-    clips = models.ManyToManyField('Clip', through='Propagation')
+    slaves = models.ManyToManyField('Node', through='Propagation')
     active = models.BooleanField(default=True)
     # internal MVCC
     version = models.IntegerField(default=0)
@@ -31,7 +31,7 @@ class Node(DirtyFieldsMixin, models.Model):
             
             # Here be dragons
             saved_node = Node.objects.get(pk=self.pk)
-            for propagation in Propagation.objects.filter(node=self):
+            for propagation in Propagation.objects.filter(master=self):
                 propagation.master_version = saved_node.version
                 propagation.save()
             
@@ -45,8 +45,8 @@ class PropagationManager(models.Manager):
         return self.get_query_set().extra(where=["slave_version > master_version"])
 
 class Propagation(models.Model):
-    node = models.ForeignKey('Node')
-    clip = models.ForeignKey('Clip')    
+    master = models.ForeignKey('Node', related_name='master_set')
+    slave = models.ForeignKey('Node', related_name='slave_set')
     # keep track of which version is where.
     master_version = models.IntegerField(default=0)
     slave_version = models.IntegerField(default=0)
@@ -65,7 +65,7 @@ class Propagation(models.Model):
     def summary_of_changes(klass):
         log = []
         for change in klass.changes.to_push():
-            master_version = change.node
+            master_version = change.master
             historical_slave_version = master_version.history.get(version=change.slave_version)
             slave_version = historical_slave_version.history_object
             log.extend([
@@ -76,22 +76,6 @@ class Propagation(models.Model):
                 "\tSlave field values: %s" % slave_version._as_dict(),
             ])
         return '\n'.join(log)
-
-class Clip(models.Model):
-    title = models.CharField(max_length=255)
-    description = models.TextField()
-    active = models.BooleanField(default=True)
-    # internal MVCC
-    version = models.IntegerField(default=0)
-    
-    history = HistoricalRecords()
-    
-    def __unicode__(self):
-        return "<Clip %s@v%s>" % (self.title, self.version)
-    
-    def save(self, *args, **kwargs):
-        self.version += 1
-        super(Clip, self).save(*args, **kwargs)
 
 def print_change_summary(sender, **kwargs):
     # assume we're in sync when creating, not always the case
